@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Leaf, Upload } from "lucide-react";
+import { ArrowLeft, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { API_BASE } from "../config.ts";
@@ -57,8 +57,8 @@ const DetectPage: React.FC = () => {
     <div className="flex flex-col min-h-screen">
       <header className="px-4 py-2 border-b flex items-center justify-between bg-white shadow-sm">
         <div className="flex items-center gap-1 font-medium">
-          <Leaf className="h-5 w-5 text-green-600" />
-          <span className="text-md">FarmFriend</span>
+          <img src = "icon.jpeg" alt="icon" className="h-6 w-6 object-contain" />
+          <span className="text-md">Nabatat</span>
         </div>
         <button
           onClick={() => navigate("/")}
@@ -70,7 +70,7 @@ const DetectPage: React.FC = () => {
       </header>
 
 
-      <main className="flex-1 py-12 bg-[#fef8e6]">
+      <main className="flex-1 py-12 flex-1 bg-[url('/detection.jpg')] bg-cover bg-center bg-fixed relative">
         <div className="container px-4 md:px-6">
           <div className="flex flex-col gap-8 md:gap-12">
 

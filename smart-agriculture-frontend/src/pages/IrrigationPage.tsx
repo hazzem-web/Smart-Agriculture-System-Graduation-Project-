@@ -1,59 +1,99 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Leaf, Droplet, Thermometer, Wind, Gauge } from "lucide-react";
+import { ArrowLeft} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { API_BASE } from "../config.ts";
 
 
 const IrrigationPage: React.FC = () => {
   const navigate = useNavigate();
-  const [sensorData, setSensorData] = useState<{
-    soil_moisture: number;
-    temperature: number;
-    humidity: number;
-    water_level: number;
-    pump_status: string;
-    timestamp: string | null;
-  } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [location, setLocation] = useState<string>("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [moisture, setMoisture] = useState<number>(50);
+  const [temperature, setTemperature] = useState<number | null>(null);
+  const [pressure, setPressure] = useState<number | null>(null);
+  const [altitude, setAltitude] = useState<number | null>(null);
+  const [rainExpected, setRainExpected] = useState<boolean | null>(null);
+  const [advice, setAdvice] = useState<string>("");
 
-  // Fetch sensor data on component mount and set up auto-refresh
-  useEffect(() => {
-    const fetchSensorData = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/sensors/data`);
-        if (!response.ok) throw new Error("Failed to fetch sensor data");
-        const data = await response.json();
-        setSensorData(data);
-        setError(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Unknown error");
-      } finally {
-        setLoading(false);
+  const handleSearch = async (query: string) => {
+    setLocation(query);
+    if (query.length > 2) {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${query}`
+      );
+      const data = await response.json();
+      setSearchResults(data);
+    } else {
+      setSearchResults([]);
+    }
+  };
+
+  const selectLocation = (place: any) => {
+    setLocation(place.display_name);
+    setSearchResults([]);
+  };
+
+  const fetchWeatherData = async (): Promise<void> => {
+    try {
+      const response = await fetch(`${API_BASE}/check_weather?location=${location}`);
+      const data: { rain_expected: boolean; temperature: number; pressure: number; altitude: number } = await response.json();
+
+      setRainExpected(data.rain_expected);
+      setTemperature(data.temperature);
+      setPressure(data.pressure);
+      setAltitude(data.altitude);
+
+      if (data.rain_expected) {
+        setAdvice("No irrigation needed due to expected rain.");
       }
-    };
+    } catch (error) {
+      console.error("Error fetching weather data:", error);
+      setAdvice("Failed to fetch weather data.");
+    }
+  };
 
-    // Initial fetch
-    fetchSensorData();
+  const getIrrigationAdvice = async (): Promise<void> => {
+    if (rainExpected) return;
+    setAdvice("Fetching irrigation advice...");
 
-    // Auto-refresh every 2 seconds
-    const interval = setInterval(fetchSensorData, 2000);
+    try {
+      const response = await fetch(`${API_BASE}/predict/irrigation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          temperature,
+          soil_moisture: moisture,
+          pressure,
+          altitude,
+        }),
+      });
 
-    return () => clearInterval(interval);
-  }, []);
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
+      }
+
+      const data: { prediction: string } = await response.json();
+      setAdvice(data.prediction);
+    } catch (error) {
+      console.error("Error fetching irrigation advice:", error);
+      setAdvice("Failed to get advice. Please try again.");
+    }
+  };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-green-50 to-blue-50">
+    <div className="min-h-screen flex flex-col bg-gray-50">
       <header className="px-4 py-2 border-b flex items-center justify-between bg-white shadow-sm">
         <div className="flex items-center gap-1 font-medium">
-          <Leaf className="h-5 w-5 text-green-600" />
-          <span className="text-md">FarmFriend - Live Sensors</span>
-        </div>
+          <img src = "icon.jpeg" alt="icon" className="h-6 w-6 object-contain" /> 
+          <span className="text-md">Nabatat</span>
+        </div> 
         <button
           onClick={() => navigate("/")}
           className="flex items-center text-green-600 text-sm hover:text-green-700 transition"
@@ -63,122 +103,77 @@ const IrrigationPage: React.FC = () => {
         </button>
       </header>
 
-      <main className="flex-1 p-6">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-3xl font-bold text-gray-800 mb-6">🌱 Real-Time Sensor Dashboard</h1>
+      <main className="flex-1 bg-[url('/IrrigationAdvisorBage.jpg')] bg-cover bg-center bg-fixed relative">
+        <Card className="w-full max-w-md shadow-xl p-6 bg-blue-100 rounded-lg absolute z-10 bottom-60 left-30">
+          <CardHeader>
+            <CardTitle className="text-center text-xl font-semibold">Irrigation Advisor</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {!temperature && (
+                <div>
+                  <Label>Enter Your Location</Label>
+                  <Input
+                    type="text"
+                    value={location}
+                    onChange={(e) => handleSearch(e.target.value)}
+                    placeholder="Search location..."
+                  />
+                  {searchResults.length > 0 && (
+                    <ul className="border rounded-md bg-white mt-1 shadow-md">
+                      {searchResults.map((place, index) => (
+                        <li
+                          key={index}
+                          className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                          onClick={() => selectLocation(place)}
+                        >
+                          {place.display_name}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <Button onClick={fetchWeatherData} className="w-full mt-2 bg-blue-600 hover:bg-blue-700">
+                    Fetch Weather Data
+                  </Button>
+                </div>
+              )}
+              {temperature !== null && (
+                <>
+                  <p className="text-center font-semibold">Temperature: {temperature}°C</p>
+                  <p className="text-center font-semibold">Pressure: {pressure} hPa</p>
+                  <p className="text-center font-semibold">Altitude: {altitude} m</p>
+                  <Separator />
+                  {!rainExpected && (
+                    <div>
+                      <Label>Soil Moisture (%)</Label>
+                      <Input
+                        type="text"
+                        value={moisture}
+                        onChange={(e) => {
+                          let value = e.target.value.replace(/\D/g, ""); // Remove non-numeric characters
+                          let num = value ? Number(value) : 0;
 
-          {loading ? (
-            <Card className="bg-white shadow-lg">
-              <CardContent className="p-8 text-center">
-                <p className="text-lg text-gray-600">⏳ Connecting to sensors...</p>
-              </CardContent>
-            </Card>
-          ) : error ? (
-            <Card className="bg-red-50 shadow-lg border-red-200">
-              <CardContent className="p-8 text-center">
-                <p className="text-lg text-red-600">❌ Error: {error}</p>
-                <p className="text-sm text-gray-600 mt-2">Make sure Python reader is running: <code className="bg-gray-200 px-2 py-1 rounded">python read_arduino.py</code></p>
-              </CardContent>
-            </Card>
-          ) : sensorData ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              {/* Soil Moisture Card */}
-              <Card className="bg-gradient-to-br from-amber-50 to-orange-100 shadow-lg">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-sm">
-                    <Droplet className="h-5 w-5 text-orange-600" />
-                    Soil Moisture
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-3xl font-bold text-orange-700">{sensorData.soil_moisture}</p>
-                  <p className="text-xs text-gray-600 mt-1">Analog Value (0-1023)</p>
-                </CardContent>
-              </Card>
+                          if (num < 0 || num > 100) {
+                            alert("Please enter a value between 0 and 100.");
+                            return;
+                          }
 
-              {/* Temperature Card */}
-              <Card className="bg-gradient-to-br from-red-50 to-rose-100 shadow-lg">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-sm">
-                    <Thermometer className="h-5 w-5 text-red-600" />
-                    Temperature
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-3xl font-bold text-red-700">{sensorData.temperature}°C</p>
-                  <p className="text-xs text-gray-600 mt-1">DHT11 Sensor</p>
-                </CardContent>
-              </Card>
-
-              {/* Humidity Card */}
-              <Card className="bg-gradient-to-br from-blue-50 to-cyan-100 shadow-lg">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-sm">
-                    <Wind className="h-5 w-5 text-blue-600" />
-                    Humidity
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-3xl font-bold text-blue-700">{sensorData.humidity}%</p>
-                  <p className="text-xs text-gray-600 mt-1">Relative Humidity</p>
-                </CardContent>
-              </Card>
-
-              {/* Water Level Card */}
-              <Card className="bg-gradient-to-br from-teal-50 to-emerald-100 shadow-lg">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-sm">
-                    <Gauge className="h-5 w-5 text-teal-600" />
-                    Water Level
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-3xl font-bold text-teal-700">
-                    {sensorData.water_level === 1 ? "Available" : "Low"}
-                  </p>
-                  <p className="text-xs text-gray-600 mt-1">Digital Signal</p>
-                </CardContent>
-              </Card>
+                          setMoisture(num);
+                        }}
+                        placeholder="Enter soil moisture (0-100%)"
+                        className="appearance-none border rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-green-500"
+                      />
+                      <Button onClick={getIrrigationAdvice} className="w-full mt-2 bg-green-600 hover:bg-green-700">
+                        Get Advice
+                      </Button>
+                    </div>
+                  )}
+                  {advice && <p className="text-center mt-4 font-semibold text-gray-800">{advice}</p>}
+                </>
+              )}
             </div>
-          ) : null}
-
-          {/* Pump Status & Timestamp */}
-          {sensorData && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Pump Status */}
-              <Card className={`shadow-lg ${sensorData.pump_status === "ON" ? "bg-gradient-to-br from-green-100 to-emerald-200 border-green-400" : "bg-gradient-to-br from-gray-100 to-gray-200 border-gray-400"}`}>
-                <CardHeader>
-                  <CardTitle className="text-lg">🚰 Pump Status</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className={`text-4xl font-bold mb-2 ${sensorData.pump_status === "ON" ? "text-green-600" : "text-gray-600"}`}>
-                    {sensorData.pump_status}
-                  </p>
-                  <Separator className="my-2" />
-                  <p className="text-sm text-gray-600">
-                    {sensorData.pump_status === "ON"
-                      ? "✅ Irrigation is currently active"
-                      : "⏸ Irrigation is paused"}
-                  </p>
-                </CardContent>
-              </Card>
-
-              {/* Last Update */}
-              <Card className="bg-white shadow-lg">
-                <CardHeader>
-                  <CardTitle className="text-lg">📡 Connection Status</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-bold text-green-600 mb-2">✅ Connected</p>
-                  <Separator className="my-2" />
-                  <p className="text-sm text-gray-600">
-                    Last Update: {sensorData.timestamp ? new Date(sensorData.timestamp).toLocaleTimeString() : "Waiting..."}
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-        </div>
+          </CardContent>
+        </Card>
       </main>
     </div>
   );
