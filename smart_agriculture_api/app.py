@@ -1,8 +1,10 @@
 import base64
 import os
-import io
+import io 
 import joblib
 import numpy as np
+import serial
+import time
 import requests
 import tensorflow as tf
 from flask import Flask, request, jsonify
@@ -12,6 +14,51 @@ from tensorflow.keras.applications import MobileNetV2
 from tensorflow.keras.layers import GlobalAveragePooling2D, Dense, BatchNormalization, Dropout
 from tensorflow.keras.models import Model
 from dotenv import load_dotenv
+import threading
+import json
+import math
+from datetime import datetime
+arduino = None
+try:
+    arduino = serial.Serial('COM3', 9600, timeout=1)
+    time.sleep(2) 
+    print("Arduino Connected on COM3")
+except Exception as e:
+    print(f"Error connecting to Arduino: {e}")
+
+def read_from_arduino():
+    global current_sensor_data
+    while True:
+        try:
+            if arduino and arduino.in_waiting > 0:
+                line = arduino.readline().decode('utf-8').strip()
+                if line:
+                    try:
+                        data = json.loads(line)
+                        
+                        # Handle NaN safely
+                        temp = data.get("Temp", 0)
+                        if isinstance(temp, float) and math.isnan(temp): temp = 0.0
+                        hum = data.get("Humidity", 0)
+                        if isinstance(hum, float) and math.isnan(hum): hum = 0.0
+                        
+                        current_sensor_data["soil_moisture"] = data.get("Soil", 0)
+                        current_sensor_data["temperature"] = temp
+                        current_sensor_data["humidity"] = hum
+                        current_sensor_data["water_level"] = data.get("WaterLevel", 0)
+                        current_sensor_data["timestamp"] = datetime.now().isoformat()
+                        
+                        if data.get("Soil", 0) > 600 and data.get("WaterLevel", 0) == 1:
+                            pass # We won't overwrite pump status since predicting/frontend handles it logic
+                    except json.JSONDecodeError:
+                        pass
+            time.sleep(0.1)
+        except Exception as e:
+            time.sleep(1)
+
+if arduino:
+    threading.Thread(target=read_from_arduino, daemon=True).start()
+
 
 app = Flask(__name__)
 
@@ -30,7 +77,11 @@ current_sensor_data = {
     "timestamp": None
 }
 # Load Models
-irrigation_model, scaler = joblib.load("models/irrigation_model.pkl")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+irrigation_model_path = os.path.join(BASE_DIR, "models", "irrigation_model.pkl")
+plant_model_path = os.path.join(BASE_DIR, "models", "plant_disease_model.h5")
+
+irrigation_model, scaler = joblib.load(irrigation_model_path)
 
 base_model = MobileNetV2(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
 x = base_model.output
@@ -41,7 +92,7 @@ x = BatchNormalization()(x)
 x = Dropout(0.2)(x)
 prediction = Dense(15, activation='softmax')(x)
 plant_model = Model(inputs=base_model.input, outputs=prediction)
-plant_model.load_weights("models/plant_disease_model.h5")
+plant_model.load_weights(plant_model_path)
 
 # Weather API Key 
 load_dotenv()
@@ -142,45 +193,34 @@ def check_weather():
         })
     return jsonify({"error": "Could not fetch weather data"}), 400
 
+
+
+
+
 @app.route("/predict/irrigation", methods=["POST"])
 def predict_irrigation():
     try:
         data = request.json
-        required_fields = ["temperature", "soil_moisture", "pressure", "altitude"]
-        if not all(k in data for k in required_fields):
-            return jsonify({"error": "Missing required fields"}), 400
-        
-        # Convert input values
         temp = float(data["temperature"])
-        soil = float(data["soil_moisture"])
         pressure = float(data["pressure"])
         altitude = float(data["altitude"])
-
+        soil = float(data["soil_moisture"])
 
         X = np.array([[temp, pressure, altitude, soil]])
         X_scaled = scaler.transform(X)
-
         prediction = irrigation_model.predict(X_scaled)[0]
 
+        # القرار وإرسال الأمر للهاردوير
         if prediction in [0, 1]: 
-            if temp > 35:
-                advice = "High temperature detected, irrigation is strongly recommended to prevent heat stress."
-            elif pressure < 1000:
-                advice = "Low atmospheric pressure detected, indicating possible weather changes. Irrigation is advised."
-            else:
-                advice = "Soil moisture is low, irrigation is recommended."
-
-        elif prediction in [2, 3]: 
-            if temp < 15:
-                advice = "Low temperature detected, moisture evaporation is slow. No irrigation needed."
-            elif pressure > 1020:
-                advice = "High atmospheric pressure detected, reducing evaporation. No irrigation required."
-            else:
-                advice = "Soil is sufficiently wet, irrigation is not required."
-
-        else:
-            advice = "Unexpected model output. Please verify input data."
-
+            if arduino:
+                arduino.write(b'1') # أمر تشغيل الطلمبة
+            current_sensor_data["pump_status"] = "ON"
+            advice = "Soil is dry. Irrigation STARTED via Arduino."
+        else: 
+            if arduino:
+                arduino.write(b'0') # أمر إيقاف الطلمبة
+            current_sensor_data["pump_status"] = "OFF"
+            advice = "Soil is wet. Pump is OFF."
 
         return jsonify({"prediction": advice})
     except Exception as e:
