@@ -4,9 +4,11 @@ import io
 import joblib
 import numpy as np
 import serial
+import serial.tools.list_ports
 import time
 import requests
 import tensorflow as tf
+import re
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from PIL import Image
@@ -20,44 +22,68 @@ import math
 from datetime import datetime
 arduino = None
 try:
-    arduino = serial.Serial('COM3', 9600, timeout=1)
+    # Try to auto-detect the Arduino port
+    arduino_port = 'COM3' # Default fallback
+    ports = serial.tools.list_ports.comports()
+    for port in ports:
+        # Check common Arduino chips (CH340, CP210x, FTDI) or name "Arduino"
+        if "Arduino" in port.description or "CH340" in port.description or "USB Serial Device" in port.description:
+            arduino_port = port.device
+            break
+            
+    arduino = serial.Serial(arduino_port, 9600, timeout=1)
     time.sleep(2) 
-    print("Arduino Connected on COM3")
+    print(f"Arduino Connected on {arduino_port}")
 except Exception as e:
-    print(f"Error connecting to Arduino: {e}")
+    print(f"Error connecting to Arduino on {arduino_port if 'arduino_port' in locals() else 'COM3'}: {e}")
 
 def read_from_arduino():
     global current_sensor_data
-    while True:
-        try:
-            if arduino and arduino.in_waiting > 0:
-                line = arduino.readline().decode('utf-8').strip()
-                if line:
-                    try:
-                        data = json.loads(line)
-                        
-                        # Handle NaN safely
-                        temp = data.get("Temp", 0)
-                        if isinstance(temp, float) and math.isnan(temp): temp = 0.0
-                        hum = data.get("Humidity", 0)
-                        if isinstance(hum, float) and math.isnan(hum): hum = 0.0
-                        
-                        current_sensor_data["soil_moisture"] = data.get("Soil", 0)
-                        current_sensor_data["temperature"] = temp
-                        current_sensor_data["humidity"] = hum
-                        current_sensor_data["water_level"] = data.get("WaterLevel", 0)
-                        current_sensor_data["timestamp"] = datetime.now().isoformat()
-                        
-                        if data.get("Soil", 0) > 600 and data.get("WaterLevel", 0) == 1:
-                            pass # We won't overwrite pump status since predicting/frontend handles it logic
-                    except json.JSONDecodeError:
-                        pass
-            time.sleep(0.1)
-        except Exception as e:
-            time.sleep(1)
-
-if arduino:
-    threading.Thread(target=read_from_arduino, daemon=True).start()
+    try:
+        if arduino:
+            arduino.reset_input_buffer()
+            arduino.readline() # Discard partial
+            line = arduino.readline().decode('utf-8', errors='ignore').strip()
+            if line:
+                line = line.replace('nan', 'NaN') # Fix unquoted nan from Arduino C++ so Python json can parse it
+                print(f"🔥 Arduino raw message: {line}")
+                
+                data = {}
+                try:
+                    data = json.loads(line)
+                except Exception:
+                    # Fallback to regex if not JSON format (using [:= ] instead of [^\d]* to prevent skipping over other keys)
+                    temp_m = re.search(r'(?i)(?:temp|temperature)[\s:=]+([\d\.]+)', line)
+                    if temp_m: data["Temp"] = float(temp_m.group(1))
+                    
+                    hum_m = re.search(r'(?i)(?:hum|humidity)[\s:=]+([\d\.]+)', line)
+                    if hum_m: data["Humidity"] = float(hum_m.group(1))
+                    
+                    soil_m = re.search(r'(?i)(?:soil|moisture)[\s:=]+([\d\.]+)', line)
+                    if soil_m: data["Soil"] = float(soil_m.group(1))
+                    
+                    water_m = re.search(r'(?i)(?:water|level)[\s:=]+([\d\.]+)', line)
+                    if water_m: data["WaterLevel"] = int(float(water_m.group(1)))
+                
+                if data:
+                    # Handle NaN safely
+                    temp = data.get("Temp", current_sensor_data["temperature"])
+                    if isinstance(temp, float) and math.isnan(temp) or temp == "NaN": temp = 0.0
+                    hum = data.get("Humidity", current_sensor_data["humidity"])
+                    if isinstance(hum, float) and math.isnan(hum) or hum == "NaN": hum = 0.0
+                    
+                    current_sensor_data["soil_moisture"] = data.get("Soil", current_sensor_data["soil_moisture"])
+                    current_sensor_data["temperature"] = temp
+                    current_sensor_data["humidity"] = hum
+                    current_sensor_data["water_level"] = data.get("WaterLevel", current_sensor_data["water_level"])
+                    current_sensor_data["timestamp"] = datetime.now().isoformat()
+                    
+                    print(f"✅ Extracted Values: Temp={temp}, Hum={hum}, Soil={current_sensor_data['soil_moisture']}")
+                    
+                    if data.get("Soil", 0) > 600 and data.get("WaterLevel", 0) == 1:
+                        pass # We won't overwrite pump status since predicting/frontend handles it logic
+    except Exception as e:
+        print(f"Error in Arduino communication: {e}")
 
 
 app = Flask(__name__)
@@ -291,6 +317,7 @@ def handle_sensor_data():
     
     else:
         # GET: Return current sensor data
+        read_from_arduino()
         return jsonify(current_sensor_data), 200
 
 # Run the Flask app
