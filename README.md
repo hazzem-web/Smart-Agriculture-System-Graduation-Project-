@@ -1,83 +1,72 @@
-# FarmFriend: A Smart Agriculture System
+# 🌱 FarmFriend: A Smart Agriculture System
 
-FarmFriend is an intelligent agricultural solution designed to empower farmers by leveraging modern technology. This project integrates **deep learning** for accurate plant disease detection and **machine learning** for efficient irrigation scheduling, providing actionable insights through a user-friendly interface.
+FarmFriend is a comprehensive and intelligent agricultural solution that bridges the gap between modern software and physical hardware. This graduation project integrates physical IoT sensors, deep learning, and a sleek frontend interface to provide real-time agricultural monitoring and automated decision-making.
 
------
+---
 
-## Key Features
+## ✨ Key Features
 
-  * **Real-time Disease Detection:** Instantly identify plant diseases by uploading an image. Our system uses a high-accuracy deep learning model to provide a quick diagnosis.
-  * **Intelligent Irrigation Scheduling:** Get smart recommendations on whether to irrigate your crops. The system analyzes key environmental and soil data to help conserve water and ensure optimal plant health.
-  * **User-Friendly Interface:** A clean and intuitive web application built with React and Vite for seamless user interaction.
-  * **Scalable Backend:** Powered by a robust Flask API, ensuring secure and efficient communication between the frontend and the machine learning models.
+- **🌱 Real-time Disease Detection:** Upload an image of a plant leaf to instantly identify diseases using an optimized MobileNetV2 architecture.
+- **💧 Smart Irrigation with Real Sensors:** The system gathers live environmental and soil data through an interconnected **Arduino** hardware setup, predicting the need for irrigation to conserve water and ensure optimal plant health.
+- **📊 Real-time Hardware Integration:** We moved beyond simulations and directly connected physical sensors (Temperature, Humidity, Soil Moisture) to the backend via Serial communication, while maintaining the OpenWeather API for supplementary atmospheric data.
+- **🖥️ User-Friendly Interface:** A clean, intuitive, and responsive web application built with modern web technologies.
+- **⚙️ Robust Python Backend:** Powered by a scalable Flask API managing the AI models, HTTP requests, and real-time serial hardware data fetch operations on-demand.
 
------
+---
 
-## System Architecture & Technology Stack
+## 🏗️ System Architecture & Technology Stack
 
-The system operates on a simple and effective architecture: a **React frontend** interacts with a **Flask backend API**, which hosts and serves predictions from the two core machine learning models.
+The system features an end-to-end architecture starting from physical IoT hardware reading the environment, a backend processing the data and AI inference, and a frontend displaying it interactively.
 
-  * **Frontend:** React, Vite, TypeScript
-  * **Backend:** Python, Flask
-  * **Machine Learning:** TensorFlow, Keras, Scikit-learn
-  * **Primary Dataset Source:** Kaggle
+- **Hardware Layer:** Arduino Microcontroller, Soil Moisture Sensor, Temperature/Humidity Sensors, Real-time Relay for Pump simulation.
+- **Backend & ML API:** Python, Flask, threading, pyserial.
+- **Frontend App:** Frontend interface via React, TypeScript, and Vite.
+- **AI & Deep Learning:** TensorFlow, Keras, Scikit-learn, joblib.
 
------
+---
 
-## Core Models
+## 🧠 Core AI Models
 
-### 1\. Plant Disease Detection (MobileNetV2)
+### 1. Plant Disease Detection
+A deep convolutional neural network fine-tuned to classify various plant diseases.
+- **Model:** Pre-trained **MobileNetV2** base augmented with Custom Layers (GlobalAveragePooling2D, BatchNormalization, Dropout, Dense).
+- **Rationale:** Chosen for its excellent balance of high accuracy and minimal computational load, making it perfect for real-time edge predictions.
+- **Performance:** Achieved ~**90% accuracy** on the PlantVillage dataset.
 
-This module uses a deep convolutional neural network to classify plant diseases from images.
+### 2. Intelligent Irrigation Scheduling 
+A binary classification model to determine whether a given area requires watering based on sensor thresholds.
+- **Model:** **Logistic Regression**.
+- **Data Input:** Combines live physical Arduino readings with cloud weather metrics.
+- **Rationale:** Fast, highly interpretable, and mathematically sound for making immediate threshold-based decisions.
 
-  * **Model:** **MobileNetV2** with Transfer Learning.
-  * **Why MobileNetV2?** It was chosen for its excellent balance of **high accuracy** and **low computational cost**, making it ideal for deployment on edge devices or mobile platforms.
-  * **Architecture:** The pre-trained MobileNetV2 base is augmented with `GlobalAveragePooling2D`, `Dense`, `BatchNormalization`, and `Dropout` layers, culminating in a `Softmax` output layer for multi-class classification.
-  * **Performance:** Achieved approximately **90% accuracy** on the **PlantVillage dataset**.
-  * **Training:** Optimized using the **Adam** optimizer with a **Categorical Crossentropy** loss function.
+> **Other Models Evaluated:**
+> We explored ResNet50 (too heavyweight), VGG16, Random Forest, and SVMs before deciding on our current optimal stack.
 
-### 2\. Intelligent Irrigation Scheduling (Logistic Regression)
+---
 
-This module predicts the need for irrigation using a binary classification model.
+## 🖼️ Project Gallery
 
-  * **Model:** **Logistic Regression**.
-  * **Why Logistic Regression?** It's highly **interpretable, fast, and efficient**, making it perfect for real-time decision-making based on sensor-like data.
-  * **Features:** The model is trained on a tabular dataset including features like **temperature, humidity, rainfall, and soil moisture**.
-  * **Output:** A binary prediction: `Irrigation Required` or `Irrigation Not Required`.
-  * **Performance:** Achieved approximately **85% accuracy**.
+A glimpse into the FarmFriend application:
 
-### Model Alternatives Explored
+![Screenshot 1](https://github.com/user-attachments/assets/2922b39f-d46c-469d-8063-daf6a3c5ac9c)
+![Screenshot 2](https://github.com/user-attachments/assets/763c4a56-5f9a-47ac-a0ca-a59ba8cc43e6)
+![Screenshot 3](https://github.com/user-attachments/assets/08b64672-4551-4c1b-8171-909cfb9bcc9d)
 
-To ensure the best model selection, several alternatives were evaluated:
+---
 
-  * **ResNet50:** Achieved the highest accuracy (**95%**) for disease detection but was deemed too heavyweight for a lightweight application.
-  * **VGG16:** Resulted in lower accuracy compared to other CNN architectures.
-  * **Random Forest:** Considered for irrigation scheduling and useful for feature importance, but was computationally heavier than Logistic Regression.
-  * **SVM & Naive Bayes:** While fast, they were less accurate for the given datasets.
+## 🚀 Future Scope
 
------
+While FarmFriend currently operates as a fully integrated hardware/software solution locally, our future targets include:
+- **Mobile Application:** A dedicated Flutter/React Native mobile application for on-the-go access.
+- **Advanced Dashboard Analytics:** Implementing long-term charts using libraries like Recharts to visualize historical health data and predict seasonal trends.
+- **Full Cloud Gateway:** Pushing the IoT data directly to an AWS/GCP cloud interface rather than local serial.
 
-## Project Demo
+---
 
-Here's a glimpse of the FarmFriend user interface.
-![WhatsApp Image 2025-03-20 at 22 18 02_3f12eb2e](https://github.com/user-attachments/assets/2922b39f-d46c-469d-8063-daf6a3c5ac9c)
-![WhatsApp Image 2025-03-20 at 22 19 19_55a12dbe](https://github.com/user-attachments/assets/763c4a56-5f9a-47ac-a0ca-a59ba8cc43e6)
-![WhatsApp Image 2025-03-20 at 22 20 04_6f847494](https://github.com/user-attachments/assets/08b64672-4551-4c1b-8171-909cfb9bcc9d)
------
+## 👥 Contributors
 
-## Future Scope
+This system was proudly developed by:
 
-We plan to enhance FarmFriend with the following features:
-
-  * **IoT Sensor Integration:** Incorporate real-time data from soil moisture, temperature, and humidity sensors for hyper-accurate irrigation predictions.
-  * **Mobile Application:** Develop a dedicated mobile app for on-the-go access and convenience.
-  * **Advanced Analytics Dashboard:** Implement a dashboard to visualize historical data, track disease trends, and monitor crop health over time.
-  * **Cloud Deployment:** Migrate the application to a cloud platform (like AWS or GCP) for improved scalability and accessibility.
-
------
-
-## Contributors
-
-  * **Hazzem Mohammed** - [@hazzem-web](https://github.com/hazzem-web)
-  * **Hady Alsaeed** - [@Hady-Alsaeed](https://github.com/Hady-Alsaeed)
-  * **MohamedAli** - [@MohamedAli](https://github.com/MohamedAliDev2004)
+- **Hazzem Mohammed** - [@hazzem-web](https://github.com/hazzem-web)
+- **Hady Alsaeed** - [@Hady-Alsaeed](https://github.com/Hady-Alsaeed)
+- **MohamedAli** - [@MohamedAli](https://github.com/MohamedAliDev2004)
